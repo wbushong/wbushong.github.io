@@ -1730,17 +1730,17 @@
 			}
 
 			h1 {
-				font-size: 3.25em;
+				font-size: 2em;
 				letter-spacing: -0.025em;
 			}
 
 			h2 {
-				font-size: 2em;
+				font-size: 1.5em;
 				letter-spacing: -0.015em;
 			}
 
 			h3 {
-				font-size: 1.5em;
+				font-size: 1em;
 				letter-spacing: -0.015em;
 			}
 
@@ -1753,7 +1753,7 @@
 			}
 
 				header > p {
-					font-size: 1.25em;
+					font-size: 1em;
 					margin: 0;
 				}
 
@@ -1762,7 +1762,7 @@
 			}
 
 				footer > p {
-					font-size: 1.25em;
+					font-size: 1em;
 				}
 
 		/* Form */
@@ -1871,7 +1871,7 @@
 				}
 
 				#top p {
-					font-size: 1.5em;
+					font-size: 1em;
 					line-height: 1.75em;
 				}
 
