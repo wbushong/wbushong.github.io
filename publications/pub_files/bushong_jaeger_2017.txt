@@ -1,0 +1,6 @@
+@inproceedings{bushong_jaeger2017, 
+	annote = {(2017)}, 
+	author = {Bushong, Wednesday and Jaeger, T. Florian}, 
+	booktitle = {Proceedings of the Thirty-Ninth Annual Conference of the Cognitive Science Society}, 
+	title = {Maintenance of perceptual information in speech perception}
+}
