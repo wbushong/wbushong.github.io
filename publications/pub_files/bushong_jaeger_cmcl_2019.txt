@@ -1,0 +1,6 @@
+@inproceedings{bushong_jaeger2019, 
+	annote = {(2019)}, 
+	author = {Bushong, Wednesday and Jaeger, T. Florian}, 
+	booktitle = {Proceedings of NAACL 2019 Cognitive Modeling and Computational Linguistics Workshop}, 
+	title = {Modeling long-distance cue integration in spoken word recognition}
+}

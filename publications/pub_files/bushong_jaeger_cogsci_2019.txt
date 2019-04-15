@@ -1,0 +1,6 @@
+@inproceedings{bushong_jaeger2019, 
+	annote = {(2019)}, 
+	author = {Bushong, Wednesday and Jaeger, T. Florian}, 
+	booktitle = {Proceedings of the Forty-First Annual Conference of the Cognitive Science Society}, 
+	title = {Memory maintenance of gradient speech representations is mediated by their expected utility}
+}
