@@ -1,0 +1,183 @@
+---
+title: 'Lab 3: Homework #3 Preparation'
+author: "Wednesday Bushong"
+date: "2/22/2017"
+output: pdf_document
+---
+
+## Preliminaries
+
+In this lab we'll be learning about outlier removal. We'll visually inspect our data to see if anything seems out of place, and then we'll learn about some more quantitative measures of outlier-ness. Finally, we'll either remove or Winsorize outliers and see how it affects our regression results. 
+
+```{r, message = FALSE, warning = FALSE}
+library(foreign)
+library(car) # for Boxplot() function
+library(ggplot2) # for nice plotting functions
+theme_set(theme_classic())
+source("../Lab2/showmelm_WB.R")
+
+d <- read.spss("Lab3Data.sav", to.data.frame = TRUE)
+d <- d[complete.cases(d), ] # remove rows with NAs
+d$case.number <- rownames(d)
+```
+
+## Visually Inspecting Potential Outliers 
+
+### Univariate
+
+To identify univariate outliers, we can use histograms and boxplots to look for values that seem out of place:
+
+```{r, warning = FALSE}
+p.hist <- ggplot(d, aes(x = W1TPsyCtrlM)) +
+  geom_histogram()
+p.hist
+
+p.box <- Boxplot(d$W1TPsyCtrlM, labels = d$W1TPsyCtrlM)
+```
+
+### Bivariate
+
+To visually inspect whether there are bivariate outliers, we'll make a scatterplot. We can also label the points by their ID number so we can easily keep track of which cases seem to be outliers:
+
+```{r}
+p.scatter <- ggplot(d, aes(x = W1TPsyCtrlM, y = W1TBehCtrlMALL, label = case.number)) +
+  geom_text(size = 5)
+p.scatter
+```
+
+## Regression Diagnostics for Outlier Identification
+
+First, we will fit a regression:
+
+```{r}
+m <- lm(W1TNegIntM ~ W1TPsyCtrlM + W1TBehCtrlMALL, d)
+```
+
+The car package in R has a function ls.diag() which computes a number of regression diagnostics from a model object:
+
+```{r}
+m.diag <- ls.diag(m)
+names(m.diag) # what's in this object?
+```
+
+### Leverage
+
+Leverage is a measure of how "extreme" values of the combination of independent variables are for each case. We can visually inspect the leverage values of each of the cases and use some rule-of-thumb cutoffs to decide whether we need to remove any of them:
+
+```{r}
+d$hat <- m.diag$hat
+d$hat.centered <- m.diag$hat - mean(m.diag$hat)
+
+## Two rules-of-thumb leverage cutoffs:
+## 2 * (# independent variables) / (# observations) [3 for "small" samples]
+## 2 * (mean hat value) [3 for "small" samples]
+cutoff.centeredvals <- (3 * 2) / nrow(d)
+cutoff.uncenteredvals <- 3 * mean(d$hat)
+
+levplot1 <- ggplot(d, aes(x = case.number, y = hat.centered, label = case.number)) +
+  geom_text(size = 6) +
+  geom_hline(yintercept = cutoff.centeredvals)
+levplot1
+
+levplot2 <- ggplot(d, aes(x = case.number, label = case.number, y = hat)) +
+  geom_text(size = 6) +
+  geom_hline(yintercept = cutoff.uncenteredvals)
+levplot2
+```
+
+
+### Discrepancy
+
+Discrepancy is the distance between predicted and observed values on the dependent variable using externally studentized residuals. The studentized residuals can be treated as t-values and we can perform a t-test on them to see whether the most extreme values are significantly different from predicted.
+
+```{r}
+d$stud.res <- m.diag$stud.res
+
+# significance of _largest_ studentized residual can be tested with a t test,
+# where t = stud.res value, df = n - k - 1, and alpha = .05 / n
+# (k = number of IVs; n = number of cases)
+# since we already have the t-value, we will use the dt() function, which gives us the probability of a t-value
+highest.t.val <- max(d$stud.res)
+p.val <- dt(highest.t.val, df = nrow(d) - 2 - 1)
+
+# get all p-values at once
+p.vals <- dt(d$stud.res, df = nrow(d) - 2 - 1)
+# see which row numbers have p vals less than 0.05
+which(p.vals < 0.05)
+# go back to using case numbers 
+d$case.number[which(p.vals < 0.05)]
+```
+
+### Influence on Regression Estimates
+
+#### Global Influence: Cook's D 
+
+Cook's D is a measure of how much an individual case influences predicted Y-values. A general rule-of-thumb cutoff is 1. 
+
+```{r}
+d$cooks.d <- m.diag$cooks
+
+p.cooks.d <- ggplot(d, aes(x = case.number, y = cooks.d, label = case.number)) +
+  geom_text(size = 6) +
+  geom_hline(yintercept = 1)
+p.cooks.d
+```
+
+#### Specific Influence
+
+DF Beta is a measure of how an indvidual case affects the coefficient estimate (beta) for a particular predictor. A rule of thumb cutoff for DF Betas is 1.
+
+```{r}
+dfbeta.vals <- as.data.frame(dfbetas(m))
+dfbeta.vals$case.number <- rownames(dfbeta.vals)
+head(dfbeta.vals, 10)
+
+p.betas.1 <- ggplot(dfbeta.vals, aes(x = case.number, label = case.number, y = W1TPsyCtrlM)) +
+  geom_text(size = 6) +
+  geom_hline(yintercept = 1) +
+  geom_hline(yintercept = -1)
+p.betas.1
+
+p.betas.2 <- ggplot(dfbeta.vals, aes(x = case.number, label = case.number, y = W1TBehCtrlMALL)) +
+  geom_text(size = 6) +
+  geom_hline(yintercept = 1) +
+  geom_hline(yintercept = -1)
+p.betas.2
+
+## programmatically add together the ones that violate the most number of cases 
+```
+
+## Removing Outliers
+
+One way of dealing with outliers is to outright remove them. Since we have seen throughout this lab that the FamilyID 1 observation is a clear outlier, let's remove it by subsetting:
+
+```{r}
+d.outlier.removed <- subset(d, FamilyID != 1) 
+```
+
+## Winsorizing Outliers 
+
+Alternatively, we might want to instead of removing a case entirely, reassigning it a more "reasonable" value. There are many different ways to do this, but here we will reassign the outlier to be the 5th or 95th percentile (depending on whether the outlier is high or low on the value).
+
+```{r}
+d.winsorized <- d 
+W1TNegIntM.quantile95 <- quantile(d.winsorized$W1TNegIntM, probs = c(0.95))
+W1TPsyCtrlM.quantile95 <- quantile(d.winsorized$W1TPsyCtrlM, probs = c(0.95))
+
+d.winsorized$W1TNegIntM[d.winsorized$FamilyID == "1"] <- W1TNegIntM.quantile95
+d.winsorized$W1TPsyCtrlM[d.winsorized$FamilyID == "1"] <- W1TPsyCtrlM.quantile95
+```
+
+## Checking how removing/Winsorizing a case affects regression results
+
+Now, let's see how regression results are affected by removing or Winsorizing our outlier.
+
+```{r}
+m.removed <- lm(W1TNegIntM ~ W1TPsyCtrlM + W1TBehCtrlMALL, d.outlier.removed)
+m.winsorized <- lm(W1TNegIntM ~ W1TPsyCtrlM + W1TBehCtrlMALL, d.winsorized)
+summary(m)
+summary(m.removed)
+summary(m.winsorized)
+```
+
+As we can see, our regression results change quite drastically if we remove or Winsorize just one single case.

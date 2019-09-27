@@ -1,0 +1,95 @@
+---
+title: 'Lab 6: Change (Pre-Post Test)'
+author: "Wednesday Bushong"
+date: "3/24/2017"
+output: pdf_document
+---
+
+Today's lab will be short and sweet :)
+
+## Overview of Pre-Post Test Analyses
+
+In a repeated measures design, instead of having only one observation per subject, you have 2 or more. This is indeed the norm in cognitive psychology! Today we'll just be tackling the case where we have a pre-test and post-test value. We have 2 options for how we want to analyze change between a pre- and post-test:
+
+* **Analyze straight change**: Here, we compute the change in the dependent variable between time A and time B.
+
+* **Analyze residual change**: Here, we predict the value at time B from the value at time A. If this is positive, it means there was positive change over time; if negative, negative over time. If there's an effect of the independent variable, then 
+
+We also have a choice for whether we want to use regression or ANOVA -- if we're using an ANOVA, we'll want to include an error term for participant.
+
+## The Data 
+
+Females and males had 'handicap' scores taken at two times. We're interested in whether gender affects the timecourse of these values.
+
+```{r, warning = FALSE}
+# Load libraries & data
+library(foreign)
+library(tidyr)
+library(ggplot2)
+
+# data
+d <- read.spss("data.sav", to.data.frame = TRUE)
+# what does the data look like?
+summary(d)
+head(d)
+# label participants
+d$participant <- as.factor(1:nrow(d))
+```
+
+There's already a change score that has been computed for us in the data. Let's make sure that these are the right values: 
+
+```{r}
+all(d$change == d$fhndicap - d$bhndicap) # all function tells you if this statement returns all TRUEs 
+```
+
+## First, Some Plotting
+
+We can visualize the straight change scores or the scores over time.
+
+```{r}
+p.change <- ggplot(d, aes(x = bgender, y = change)) +
+  stat_summary(fun.data = mean_cl_boot, geom = "pointrange")
+p.change
+
+d.gathered <- gather(d, time, value, bhndicap:fhndicap)
+# we 'gather' the data so that bhndicap and fhndicap are compressed into one column 
+# that columns essentially represents time, so I call it 'time' (argument 2 of gather)
+# the other column, which I assign the name 'value', will contain the actual values that were the original contents of the bhndicap and fhndicap columns
+
+# plot data over time
+p.over.time <- ggplot(d.gathered, aes(x = time, y = value, 
+	group = bgender, shape = bgender)) +
+	stat_summary(fun.y = mean, geom = "point", size = 4) +
+	stat_summary(fun.data = mean_cl_boot, geom = "errorbar", width = 0.1) +
+	stat_summary(fun.y = mean, geom = "line")
+p.over.time
+```
+
+## Straight Change
+
+Super easy: just predict change scores from gender! We can either predict straight change, or predict value from the time * gender interaction. 
+
+```{r}
+m <- aov(change ~ bgender + Error(participant), d) # Error(participant) adds in the within-subject error term into the model
+summary(m)
+
+# equivalent to:
+m.int <- aov(value ~ bgender * time + Error(participant), d.gathered)
+summary(m.int)
+
+m2 <- lm(change ~ bgender, d)
+summary(m2)
+```
+
+## Residual Change
+
+For a residual change analysis, we predict scores at the second time point (fhndicap) from the first time point & our independent variable, gender. 
+
+```{r}
+m3 <- aov(fhndicap ~ bhndicap + bgender, d)
+summary(m3)
+
+m4 <- lm(fhndicap ~ bhndicap + bgender, d)
+summary(m4)
+```
+

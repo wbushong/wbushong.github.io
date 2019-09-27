@@ -1,0 +1,221 @@
+---
+title: "Lab 4: Coding Categorical Variables"
+author: "Wednesday Bushong"
+date: "3/1/2017"
+output: pdf_document
+---
+
+# Part I: Coding Categorical Variables
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+library(ggplot2)
+library(knitr)
+library(car)
+```
+
+In this lab we'll be learning about dummy and contrast coding for categorical variables.
+
+## Data Information
+
+Dependent variable: Self-Confidence, a numeric value ranging from -0.36 -- 9.15; it seems that this variable has been standardized in some way already.
+
+Predictor variable: Group, a categorical variable 4 with levels
+
+* adult.neg: adults, receiving negative feedback 
+
+* adult.pos: adults, receiving positive feedback 
+
+* child.neg: children, receiving negative feedback 
+
+* child.pos: children, receiving negative feedback
+
+(Note that this is really a 2x2 design with adult vs. child & negative vs. positive feedback, but we're not going to talk about categorical interactions for another week so we'll treat this as one variable.)
+
+Let's load the data and get a feel for it:
+
+```{r, echo=FALSE}
+d <- read.csv("codingdata.csv")
+
+head(d)
+summary(d)
+```
+
+As we can see from the `summary()` function, we have an equal number of subjects in each of the groups, so we don't need to worry about any of our variable coding potentially being non-orthogonal if we choose to do contrast/sum coding.
+
+First, let's visualize the data and get a feel for what the group differences might look like:
+
+```{r}
+p <- ggplot(d, aes(x = group, y = self.confidence)) +
+  stat_summary(fun.data = mean_cl_boot, geom = "pointrange")
+p
+```
+
+## Overview of Coding in R
+
+One of the biggest blessings and curses of R is that every categorical variable in a data frame is defaultly assigned a coding scheme. To see how this works, let's see how R handles entering a categorical variable into a regression:
+
+```{r}
+m <- lm(self.confidence ~ group, d)
+summary(m)
+```
+
+You'll notice that R isn't angry that you're only passing one variable into a regression when it has 4 levels. This is because R by default has instead created a coding scheme by default which is *implicitly* passed into the regression. That is, when you pass in "group", it passes in the 3 contrasts it has defaultly assigned. To see what those contrasts are, we can use the `contrasts()` function:
+
+```{r}
+contrasts(d$group)
+```
+
+R defaultly assigns each categorical factor a dummy coding scheme, with the levels being sorted alphabetically, leaving adult.neg as the reference group. 
+
+Another convenient way to look at how all of your contrasts are being assigned is with the `model.matrix()` function. This returns, for every row in your data frame, the value of that row on each of the variables in the regression. We can check against our raw data to see how these line up.
+
+```{r}
+head(model.matrix(m)) 
+head(d)
+```
+
+The first few rows have values of 0 for all of the dummy coded variables, because these were observations that came from the reference group, which  we can confirm by seeing that first few rows of `d` are from the adult.neg group.
+
+## Dummy Coding
+
+Let's imagine that we have the hypothesis that children who receive negative feedback have higher self-esteem than each of the other groups. How would we test that? We would want to keep the dummy coding scheme, but change the reference group. We can change contrasts in R by directly reassigning `contrasts(d$group)` to have the values we want. There is a handy function in R, `contr.treatment()`, that will create dummy codes for a specified number of levels and assign the reference group to one of those levels. Alternatively, we can manually assign contrasts by creating a matrix of our desired values. 
+
+```{r}
+## First way of dummy coding: using the contr.treatment() function
+contrasts(d$group) <- contr.treatment(4, base = 3) # base specifies which level is the reference
+# We can rename the contrast vectors to have more sensical names
+colnames(contrasts(d$group)) <- c("childneg.vs.adultneg", 
+                                  "childneg.vs.adultpos", 
+                                  "childneg.vs.childpos")
+
+kable(contrasts(d$group))
+
+## Second way of dummy coding: manual assignment
+contrasts(d$group) <- cbind(childneg.vs.adultneg = c(1, 0, 0, 0),
+                             childneg.vs.adultpos = c(0, 1, 0, 0),
+                             childneg.vs.childpos = c(0, 0, 0, 1))
+
+kable(contrasts(d$group))
+
+## Fit a model
+m.childneg.ref <- lm(self.confidence ~ group, d)
+summary(m.childneg.ref)
+```
+
+## Contrast Coding
+
+Contrast coding is a bit more complicated because you need to think a lot harder about the hypotheses you want to test and what contrasts those map to, whereas with dummy coding you're always asking a pairwise-comparison type of question.
+
+Suppose we have the following hypotheses:
+
+* Children have higher self-confidence than adults.
+
+* Feedback does not affect adults' self-confidence.
+
+* Feedback does affect children's self-confidence.
+
+How would we fill out a contrast matrix to test these questions? 
+
+```{r}
+contrasts(d$group) <- cbind(adult.vs.child = c(1, 1, -1, -1),
+                            feedback.adult = c(1, -1, 0, 0),
+                            feedback.child = c(0, 0, 1, -1))
+# make sure to come to class to see the math of why this works out!
+
+kable(contrasts(d$group))
+
+m.contrastcodes1 <- lm(self.confidence ~ group, d)
+summary(m.contrastcodes1)
+```
+
+### Checking for Orthogonality of Contrasts
+
+R has a matrix multiplication operator, `%*%`, that we can use to compute the dot product between contrasts to check for orthogonality:
+
+```{r}
+contrasts(d$group)[, 1] %*% contrasts(d$group)[, 2]
+contrasts(d$group)[, 2] %*% contrasts(d$group)[, 3]
+contrasts(d$group)[, 1] %*% contrasts(d$group)[, 3]
+```
+
+## Practice Problems
+
+1. Dummy code d$group so that child.pos is the reference group and fit a model.
+
+* What is the meaning of the intercept?
+
+* From only looking at model output, what is the mean of the child.neg group? 
+
+* From only looking at model output, what is the mean of the adult group? 
+
+2. Create contrast codes for d$group that test the difference between (1) the mean of children and the mean of adults,  (2) the mean of negative feedback and the mean of positive feedback, and (3) the difference between the effect of feedback for children vs. adults.
+
+* After you've coded the contrasts and fit a model, how will you interpret each of the $\beta$s?
+
+# Part II: Type I, II, and III Sum of Squares
+
+Let's introduce a new dataset that we'll be using next week as well:
+
+```{r}
+d2 <- read.csv("UnbalancedInteractionData.csv")
+head(d2)
+summary(d2)
+```
+
+We want to keep things simple for now, so let's reduce this data to a 2x2 problem:
+
+```{r}
+# Contrast-code gender and grade: 
+contrasts(d2$Gender) <- cbind(male = c(-1, 1))
+contrasts(d2$Grade) <- cbind(Grade7 = c(-1, 1))
+
+mm <- model.matrix(Self_control ~ Gender * Grade, d2)
+```
+
+We can confirm that our contrasts are now not orthogonal by testing for orthogonality on the model matrix columns that represent our coding scheme:
+
+```{r}
+mm[, 2] %*% mm[, 3]
+mm[, 2] %*% mm[, 4]
+mm[, 3] %*% mm[, 4]
+```
+
+Now, let's fit the actual 2x2 interaction model:
+
+```{r}
+m.int <- lm(Self_control ~ Gender * Grade, d2)
+```
+
+We can view the sum of squares by calling the `anova()` function: 
+
+```{r}
+anova(m.int)
+```
+
+But wait...what kinds of sum of squares are these?! This is another thing that R just does under the hood. This blog post on r-bloggers clarifies the issue: https://www.r-bloggers.com/anova-%E2%80%93-type-iiiiii-ss-explained/
+
+As it turns out, `anova()` by default uses Type I SS. We can verify this by reversing the order of terms in our interaction model and see that the results change:
+
+```{r}
+m.int.2 <- lm(Self_control ~ Grade * Gender, d2) # enter Grade first
+anova(m.int.2)
+```
+
+As is often the case with R, a special package was developed for dealing with this strange, unchangeable, implicit behavior. Using the capital-A `Anova()` function from the `car` package, we can specify what type of SS we want, and confirm that the behavior is the same for both of our models: 
+
+```{r}
+Anova(m.int, type = "II")
+Anova(m.int.2, type = "II")
+
+Anova(m.int, type = "III")
+Anova(m.int.2, type = "III")
+```
+
+But wait...what does the `summary()` function for model objects by default give you? 
+
+```{r}
+summary(m.int)
+summary(m.int.2)
+```
+
+Yep, that's right -- even though the default `anova()` function gives you Type I SS, the default `summary()` function gives you Type III. 

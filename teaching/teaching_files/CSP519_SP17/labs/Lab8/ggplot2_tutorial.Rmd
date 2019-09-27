@@ -1,0 +1,459 @@
+---
+title: 'Plotting Using ggplot2'
+author: "Wednesday Bushong"
+date: "April 21, 2017"
+output: html_document
+---
+
+```{r, echo = FALSE, warning = FALSE}
+library(ggplot2)
+library(effects)
+```
+
+## Introduction: The Basic Logic of ggplot2
+
+`ggplot2` is an extraordinarily popular plotting package in R. It's so popular that copies have been created for many other languages! `ggplot2` is based on what its author, Hadley Wikham, calls the "grammar of graphics". The basic logic is that you lay down some sort of base layer using the `ggplot()` command, and then add shapes, or `geom`s, progressively on top based on how you want to represent your data. 
+
+Let's start with a simple example. I'm going to load in some data from a self-paced reading (SPR) experiment:
+
+```{r}
+load("SPR_Data.RData")
+head(d)
+```
+
+Don't worry about the details of the experiment too much, but the basic idea is that subjects read sentences word-by-word at their own pace and I record their reading time (RT) at each word, encoded in the `RawRT` column. In this particular experiment I manipulated the syntactic structure of the sentence, indicated by the column `structure`. I also have how far along in the experiment the subejct is encoded in the `Trial` column. Finally, the last critical variable in here is the `region` variable, which corresponds to what part of the sentence they're in.
+
+## Setting up your Canvas: The `ggplot()` function
+
+The first ingredient of a ggplot2 plot is the function `ggplot()`. Here is where you specify what data you'll be plotting, and what the x and y axes will correspond to. The first argument tells ggplot which data frame you will be using. **ggplot only takes data frames as input!** The `aes`, or *aesthetics*, argument tells ggplot which columns should correspond to the x and y axes.
+
+As a simple example, let's say that we want to make a plot where we look at RT over trials in the experiment. In that case, we would specify `Trial` as our x-axis and `RawRT` as our y-axis:
+
+```{r}
+p <- ggplot(d, aes(x = Trial, y = RawRT))
+```
+
+If we look at what `p` is, we can see it's a blank canvas:
+
+```{r}
+p
+```
+
+Notice that the x and y axes range from the minimum to maximum observations in our data in those columns:
+
+```{r}
+range(d$Trial)
+range(d$RawRT)
+```
+
+## Plotting Data: `geom`s
+
+A `geom` in `ggplot2` is a way to add a specific kind of shape to your plot. Some common ones include:
+
+* `geom_point`: plots observations as points
+
+* `geom_bar`: plots observations as bars; only works well when you have already computed means, because the default is to add together the value of all of the observations
+
+* `geom_boxplot`: generates summary statistics like median, IQR, etc., and plots them as a boxplot
+
+* `geom_line`: creates a line connecting specific observations to each other, usually along the x-axis, but sometimes with unintended consequences...
+
+You can find a full list of `geom`s here: http://sape.inf.usi.ch/quick-reference/ggplot2/geom
+
+Now we are ready to add things to our canvas! Given that we're looking at RT over trial, we might want to make a scatterplot, which means we want to make a series of points that correspond to RT observations at each trial. Let's use `geom_point`. What's cool about `ggplot2` is that you can take old plotting objects and add onto them, like so:
+
+```{r}
+p <- p + # take our blank canvas and add onto it
+	geom_point()
+p
+```
+
+Cool, now we have a scatterplot! However, the first thing you'll probably notice is that the data looks like a total disaster because of just how many observations we have in each trial bin. How many data points do we have?
+
+```{r}
+nrow(d)
+```
+
+Over 23,000 observations means that a simple scatterplot probably isn't going to cut it. What we probably want instead is to get the *mean* RT at each trial bin and plot that. Then it will be much clearer what is going on! One way to do this is to manually compute the means and put them in a new data frame, and then plot that. However, `ggplot2` has a much easier and more awesome way of doing that, using the `stat_summary()` function!
+
+## Computing Summary Statistics: `stat_summary()`
+
+The `stat_summary()` function automatically computes summary statistics by grouping along the factors that we originally specified in our "blank canvas" `ggplot()` call. The function is a little complicated, so first I'll give an example and walk through it. 
+
+```{r}
+p2 <- ggplot(d, aes(x = Trial, y = RawRT)) + # I'm just making a new plot with a new blank canvas so that it's clear what's going on
+	stat_summary(geom = "point", fun.y = "mean")
+p2
+```
+
+Notice the two arguments I provided to `stat_summary()`:
+
+* `geom`: This specifies which `geom` you want. I went with points again!
+
+* `fun.y`: This is a little bit more complicated. Using the `fun.y` argument means that I want ggplot to aggregate *across the x dimension*: That is, for each value of what is on the x-axis, `Trial`, compute the function that I specify. In this case, I use mean. We could also use something like median:
+
+```{r}
+p3 <- ggplot(d, aes(x = Trial, y = RawRT)) + # I'm just making a new plot with a new blank canvas so that it's clear what's going on
+	stat_summary(geom = "point", fun.y = "median")
+p3
+```
+
+The kind of aggregation you can apply to plots depends on the `geom` you are using. For example, there is a `geom` called `pointrange` which plots a point and error bars. In this case, the function won't allow you to use `fun.y`; instead, you have to use `fun.data`*:
+
+```{r}
+p4 <- ggplot(d, aes(x = Trial, y = RawRT)) + # I'm just making a new plot with a new blank canvas so that it's clear what's going on
+	stat_summary(geom = "pointrange", fun.data = "mean_cl_boot")
+p4
+```
+
+Here, we need a function that computes not only the mean, but also some sort of error bars. Here I have chosen confidence intervals (cl = "confidence level") that are computed by bootstrapping (boot = "bootstrap") the data.
+
+*The under-the-hood reason for this is that `fun.y` only computes one value, whereas `fun.data` computes several values (here, the mean, lower confidence interval, and upper confidence interval) and stores them as a `data.frame` that is passed to the plotting function.
+
+## Plotting Model Fits on Data
+
+We can see from the scatterplot that there is obviously a linear trend in my data: people read faster the farther they are into the experiment. If that is indeed true, it would be nice to show the best-fit line from the regression model on top of our data. There are two ways to do this:
+
+1. There exists a `geom` that fits a model to your data and plots a line with confidence intervals called `geom_smooth`. This is a quick and easy way to get a feel for what trends might be in your data, but it is often not reflective of your final analysis where you usually control for other variables in your experiment
+
+2. Fit a linear regression model and use predictions from the model to plot as a line on top of your data
+
+I'll quickly show you how to do option (1). Let's use our plot `p2` where we made a scatterplot:
+
+```{r}
+p.smoothline <- p2 +
+	geom_smooth(method = "lm")
+p.smoothline
+```
+
+This clearly shows that we have a trial effect in our data, but this function is essentially just fitting `lm(RawRT ~ Trial, d)` without controlling for anything else. Let's explicitly fit a model ourselves that controls for other relevant variables in my data:
+
+```{r}
+m <- lm(RawRT ~ Trial * structure + order + region, d)
+```
+
+I'm not going to show you the summary because there's a lot going on! Suffice to say that I just threw in some other variables that might suck some of the variance away from the `Trial` effect.
+
+Now we want to plot our model's predictions. To that effect, we're going to use the `effects` package. It contains a function called `Effect` which will generate predictions about your data at regular intervals.
+
+```{r}
+predictions <- Effect("Trial", m, # first argument = effect you want; second argument = model object
+                      xlevels=list(Trial = seq(0, max(d$Trial)))) # xlevels argument: how many predictions do you want to make?
+predictions <- as.data.frame(predictions) # turn this into something ggplot2 will take
+predictions
+```
+
+Now we're going to do a couple of things that are a bit complicated:
+
+* First, make a plot that shows model predictions as lines. We'll need two `geom`s: `geom_line`, to draw the line through our model predictions; and `geom_ribbon`, which shades in an area that you specify.
+
+* Second, add in the empirical observations as a scatterplot on top of the model predictions plot, which involves using two datasets inside of a single plot
+
+First, let's plot our prediction lines:
+
+```{r}
+p.predictionline <- ggplot(predictions, aes(x = Trial, y = fit)) +
+	geom_line() +
+	geom_ribbon(aes(ymin = lower, ymax = upper), alpha = 0.1, linetype = "blank") 
+  # alpha controls transparency; if we didn't set it to anything we would end up with an ugly black box
+  # linetype = "blank" removes what would otherwise be a line around the box that geom_ribbon creates 
+p.predictionline
+```
+
+Now, we're going to add on the scatterplot that we created before. This means that we need to use another `data.frame` object. "But Wednesday, you just told us that our blank canvas depends on the data frame you passed into the initial ggplot call! How can you have multiple datasets on the same canvas?!" Never fear, as it turns out, each `geom` function can optionally take its own `data.frame`, *as long as you specify your new axes*:
+
+```{r}
+p.predictionsAndData <- p.predictionline +
+	stat_summary(data = d, aes(y = RawRT), geom = "point", fun.y = "mean")
+p.predictionsAndData
+```
+
+In our `predictions` data frame, we didn't have a `RawRT` column; instead what's on our y-axis is `fit`. So in our new `stat_summary` call using a different data frame, we had to specify that the y-axis should now correspond to the `RawRT` column. Notice that we didn't have to specify the x-axis because it's the column called `Trial` in both of our data frames.
+
+## Dividing up by other Grouping Variables 
+
+Let's say that we want to know whether the `Trial` effect varies by what syntactic structure you're in. We can add additional grouping factors in `aes()` of our original `ggplot()` call:
+
+```{r}
+p.structure <- ggplot(d, aes(x = Trial, y = RawRT, color = structure)) +
+  stat_summary(geom = "point", fun.y = "mean")
+p.structure
+```
+
+Visually, it's hard to tell whether there's anything going on here. I actually had an interaction term in the `m` model above, and indeed there is an interaction. We can again plot the predicted differences in Trial effect by calling the `Effect()` function:
+
+```{r}
+trial.structure.predictions <- Effect(c("Trial", "structure"), m,
+                                      xlevels = list(Trial = seq(0, max(d$Trial))))
+trial.structure.predictions <- as.data.frame(trial.structure.predictions)
+```
+
+Now, we can repeat the same line-plotting process as above:
+
+```{r}
+p.trial.structure.predictions <- ggplot(trial.structure.predictions, aes(x = Trial, y = fit, color = structure)) +
+	geom_line() +
+	geom_ribbon(aes(ymin = lower, ymax = upper), alpha = 0.1, linetype = "blank") +
+  stat_summary(data = d, aes(y = RawRT), geom = "point", fun.y = "mean")
+p.trial.structure.predictions
+```
+
+
+## Aesthetic Things: Adding Titles, Changing Themes, Saving Optimally, etc
+
+Now we have a pretty great plot, but it's kind of hard to tell what it is. There's no title, the y-axis isn't very informative, the text is a little small, etc.
+
+### Changing Titles 
+
+You can add/modify titles and axes with `ggtitle`, `xlab`, and `ylab`:
+
+```{r}
+p.trial.structure.predictions <- p.trial.structure.predictions +
+  ggtitle("Trial Effect by Syntactic Structure") +
+  xlab("Trial Number") +
+  ylab("Reading Time (RT)") 
+p.trial.structure.predictions
+```
+
+## Editing Color & Legend Options
+
+Suppose that we don't want to have hideous pink and teal colors in our plot. We can change them in a variety of ways using the `scale_color_X` family of functions, where X can be `manual`, `gradient`, `brewer`, etc. I typically use `manual` because that allows you to specify any colors you want rather than relying on preset themes. The function you use to set the colors is also where you can specify the name of the legend and the key.
+
+```{r}
+p.trial.structure.predictions <- p.trial.structure.predictions +
+  scale_color_manual(values = c("red", "blue"), name = "Syntactic Structure", 
+                     labels = c("Double Object (DO)", "Prepositional Object (PO)"))
+p.trial.structure.predictions
+```
+
+## Adding Annotations to Plots
+
+All of our plotting is well and good, but we may want to tell readers what the effects actually are in the model so that readers can immediately see whether the Trial effect is significant and the interaction is significant. This is easy to do with barplots because you can just add asterisks, but in a lineplot it can be difficult to eyeball. Let's add our B's and p values to the plot using the `annotate` function.
+
+First, I'm going to create a string that corresponds to the label we want to add to our plot:
+
+```{r}
+trial.effect <- summary(m)$coefficients["Trial", c("Estimate", "Pr(>|t|)")]
+trial.effect <- round(trial.effect, digits = 4)
+trial.label <- paste0("Trial Main Effect: B = ", trial.effect["Estimate"], ", p = ", trial.effect["Pr(>|t|)"])
+
+trial.interaction <- summary(m)$coefficients["Trial:structurePO", c("Estimate", "Pr(>|t|)")]
+trial.interaction <- round(trial.interaction, digits = 4)
+trial.interaction.label <- paste0("Trial * Structure Interaction: B = ", trial.interaction["Estimate"], ", p = ", trial.interaction["Pr(>|t|)"])
+```
+
+Now that we have our labels, we can insert them into the plot using `annotate`:
+
+```{r}
+p.trial.structure.predictions <- p.trial.structure.predictions +
+  annotate(geom = "text", x = 25, y = 300, label = trial.label, size = 4.5) +
+  annotate(geom = "text", x = 25, y = 290, label = trial.interaction.label, size = 4.5) 
+p.trial.structure.predictions
+```
+
+### Making things prettier: the `theme()` function 
+
+Now that our plot is sensical and understandable by readers, we can make aesthetic changes. For example, the legend takes up a lot of space and we may want to move it somewhere else; the text is a bit hard to read so we may want to make it bigger; and I think the grey background is ugly. 
+
+Your first line of defense is to use one of the preset themes that come in the package. The default theme is `theme_grey()`, and we can see the other themes by using the help:
+
+```{r}
+?theme_grey
+```
+
+One of my personal favorites is `theme_classic()`. Let's apply it and also make the base text size larger:
+
+```{r}
+p.trial.structure.predictions <- p.trial.structure.predictions +
+  theme_classic(base_size = 15)
+p.trial.structure.predictions
+```
+
+As it turns out, you can set the theme option globally as well, using `theme_set()`. Let's do that so that all of our plots will have the defaults of `theme_classic()`:
+
+```{r}
+theme_set(theme_classic(base_size = 15))
+```
+
+Now we'll want to go in and manually change things we still don't like. All of these possibilities are covered by the `theme()` function which we can add to our plot object. There are a lot of `theme()` arguments, let's see the options...
+
+```{r}
+?theme
+```
+
+The plot is mostly fine now, but let's move the legend out of the way by using the `legend.position` argument:
+
+```{r}
+p.trial.structure.predictions <- p.trial.structure.predictions +
+  theme(legend.position = c(0.8, 0.8))
+p.trial.structure.predictions
+```
+
+Notice that instead of specifying `x` and `y` relative to the canvas, they're these weird proportions that range from 0 to 1. 0 on the x-axis means closer to the left and 0 on the y-axis means closer to the bottom. So we want high values on each to put our legend in the top right corner.
+
+Now it's a masterpiece! Let's save the plot by using the "Export to PDF" option Rstudio gives us.
+
+Let's pat ourselves on the back by looking at all of the code we used to write this plot in one chunk rather than divided up across sections...
+
+```{r}
+p.trial.structure.predictions <- ggplot(trial.structure.predictions, aes(x = Trial, y = fit, color = structure)) +
+	geom_line() +
+	geom_ribbon(aes(ymin = lower, ymax = upper), alpha = 0.1, linetype = "blank") +
+  stat_summary(data = d, aes(y = RawRT), geom = "point", fun.y = "mean") +
+  ggtitle("Trial Effect by Syntactic Structure") +
+  xlab("Trial Number") +
+  ylab("Reading Time (RT)") + 
+  scale_color_manual(values = c("red", "blue"), name = "Syntactic Structure", 
+                     labels = c("Double Object (DO)", "Prepositional Object (PO)")) +
+  annotate(geom = "text", x = 25, y = 300, label = trial.label, size = 4.5) +
+  annotate(geom = "text", x = 25, y = 290, label = trial.interaction.label, size = 4.5) +
+  theme_classic(base_size = 15) +
+  theme(legend.position = c(0.8, 0.8))
+p.trial.structure.predictions
+```
+
+## Example of a complex plot using many more geoms and features of ggplot2
+
+Now I'm going to show you an example of a very complicated plot that contains a lot of information!
+
+Now we're going to be looking at a different aspect of the self-paced reading data: showing the reading time breakdown by region, syntactic structure, and word order. This is the way I want the data to be displayed:
+
+* Sentence region should be on the x-axis so that we're moving left-to-right through the sentence: This will correspond to the `x` argument of `aes()` in our "blank canvas" `ggplot()` call
+
+* I'm interested in comparing the reading time difference between orders at each of the levels of structure, so I want: 
+  * Division between `order` using color: This will correspond to the `color` argument of `aes()` in our "blank canvas" `ggplot()` call. I will also want to draw lines that connect the dots between regions on the basis of order, so we will need to incorporate the `group` argument of `aes()` (you'll see why below)
+  * Division between the left side and the right side of the plot by `structure`: This will correspond to a new function we haven't talked about yet, `facet_wrap()`: this function creates sub-plots that are divided on the basis of the levels of the variable you pass it
+  
+First, let me show you our "blank canvas" call:
+
+```{r}
+p.spr <- ggplot(d, aes(x = region, y = RawRT, color = order, group = order)) +
+  facet_wrap(~ structure) 
+p.spr
+```
+
+We can see that things are set up exactly as we want. Now what I'm going to do is add points, errorbars, and connecting lines onto the plot:
+
+```{r}
+p.spr <- p.spr +
+	stat_summary(geom = "point", fun.y = "mean") +
+	stat_summary(geom = "errorbar", fun.data = "mean_cl_boot", width = 0.2) +
+	stat_summary(geom = "line", fun.y = "mean") 
+p.spr
+```
+
+Now, let's add some aesthetics: 
+
+```{r}
+p.spr <- p.spr +
+  scale_color_manual(values = c("red", "blue"), name = "Word Order", labels = c("Given-New", "New-Given")) +
+  xlab("Sentence Region") +
+  ylab("Reading Time (ms)") +
+  theme_classic(base_size = 15) +
+  theme(legend.position = c(0.7, 0.8),
+        axis.text.x = element_text(angle = -45, hjust = 0))
+p.spr
+```
+
+And there you have it! A whirlwind tour of plotting!
+
+## Quick Examples of Other Common `geom`s 
+
+### Bar Plots
+
+#### Bar Plot 1: compare order reading time by structure. 
+
+```{r}
+d.subset <- subset(d, region == "Spillover") # look at reading times at just one region
+p.bar1 <- ggplot(d.subset, aes(x = order, y = RawRT, fill = order)) +
+  stat_summary(geom = "bar", fun.y = "mean") + # plot means with bar
+  stat_summary(geom = "errorbar", fun.data = "mean_cl_boot", width = 0.2) + # plot error bars with confidence intervals
+  facet_wrap(~ structure)
+p.bar1
+```
+
+Notice that the default is for the bars to start at 0, but all the information is at the top. Let's adjust the axes using `coord_cartesian`:
+
+```{r}
+p.bar1 <- p.bar1 +
+  coord_cartesian(ylim = c(310, 345))
+p.bar1
+```
+
+Much better!
+
+#### Bar Plot 2: compare order reading time by structure without using facetting
+
+We can plot both structure and order on the x-axis by using the `interaction` function within our `x` argument in `aes()`:
+
+```{r}
+p.bar2 <- ggplot(d.subset, aes(x = interaction(order, structure), y = RawRT, fill = order)) +
+  stat_summary(geom = "bar", fun.y = "mean") + # plot means with bar
+  stat_summary(geom = "errorbar", fun.data = "mean_cl_boot", width = 0.2) +
+  coord_cartesian(ylim = c(310, 345))
+p.bar2
+```
+
+### Getting a better idea of distributions: histograms, density, boxplots, violin plots
+
+#### Histograms
+
+```{r}
+p.hist <- ggplot(d.subset, aes(x = RawRT, fill = order)) +
+  geom_histogram()
+p.hist
+```
+
+The default of `geom_histogram` is to just stack the counts on top of each other which doesn't give a very good comparison. We can fix this with the additional argument `position = "identity"`, and making the fill of the histogram transparent so that we can see overlap:
+
+```{r}
+p.hist.better <- ggplot(d.subset, aes(x = RawRT, fill = order)) +
+  geom_histogram(position = "identity", alpha = 0.4)
+p.hist.better
+```
+
+#### Density plots
+
+```{r}
+p.density <- ggplot(d.subset, aes(x = RawRT, fill = order)) +
+  geom_density(alpha = 0.4) +
+  facet_wrap(~ structure)
+p.density
+```
+
+#### Violin plots
+
+Violin plots are like density plots flipped on their side and made symmetric: 
+
+```{r}
+p.violin <- ggplot(d.subset, aes(x = order, y = RawRT, fill = order)) +
+  geom_violin() +
+  facet_wrap(~ structure)
+p.violin
+```
+
+You can also add additional information, e.g. by adding mean & CIs on top:
+
+```{r}
+p.violin.fancy <- p.violin +
+  stat_summary(geom = "pointrange", fun.data = "mean_cl_boot")
+p.violin.fancy
+```
+
+#### Boxplot
+
+```{r}
+p.box <- ggplot(d.subset, aes(x = order, y = RawRT)) +
+  geom_boxplot()
+p.box
+```
+
+#### Boxplot w/ additional factors
+
+```{r}
+p.boxplot.fancy <- ggplot(d.subset, aes(x = interaction(order, structure), y = RawRT, fill = order)) +
+  geom_boxplot()
+p.boxplot.fancy
+```
+
+

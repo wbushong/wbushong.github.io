@@ -1,0 +1,52 @@
+---
+title: 'Lab 6: Repeated Measures'
+author: "Wednesday Bushong"
+date: "3/23/2017"
+output: pdf_document
+---
+
+Today's lab will be short and sweet :)
+
+## Overview of Repeated Measures
+
+In a repeated measures design, instead of having only one observation per subject, you have 2 or more. This is indeed the norm in cognitive psychology. 
+
+```{r}
+####################################
+## Lab 8 3/23/16
+####################################
+library(foreign)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+
+handicap <- read.spss("lab 8 Data.sav", to.data.frame = TRUE)
+
+handicap.long <- handicap
+handicap.long$participant <- 1:nrow(handicap.long) 
+handicap.long$participant <- as.factor(handicap.long$participant)
+handicap.long <- gather(handicap.long, time, value, bhndicap:fhndicap)
+
+handicap$participant <- as.factor(1:nrow(handicap))
+handicap.long2 <- gather(handicap, time, value, bhndicap:fhndicap)
+
+p <- ggplot(handicap.long, aes(x = time, y = value, 
+	group = bgender, shape = bgender)) +
+	stat_summary(fun.y = mean, geom = "point", size = 4) +
+	stat_summary(fun.data = mean_cl_boot, geom = "errorbar", width = 0.1) +
+	stat_summary(fun.y = mean, geom = "line")
+p
+
+m1.me <- aov(value ~ bgender * time + Error(participant), handicap.long2)
+summary(m1.me)
+
+m2 <- lm(change ~ bgender, handicap)
+summary(m2)
+
+m3 <- aov(fhndicap ~ bhndicap + bgender, handicap)
+summary(m3)
+
+m4 <- lm(fhndicap ~ bhndicap + bgender, handicap)
+summary(m4)
+```
+
