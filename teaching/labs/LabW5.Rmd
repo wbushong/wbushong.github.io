@@ -1,0 +1,512 @@
+---
+title: 'Lab 1 & 2: Data Visualization & Basic Linear Regression'
+author: "Wednesday Bushong"
+date: "May 31, 2022"
+output: html_document
+---
+
+<style type="text/css">
+  body{
+  font-size: 13pt;
+}
+</style>
+
+# Part 1: Data Visualization
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Let's start by loading the `tidyverse` package:
+
+```{r, cache = TRUE}
+library(tidyverse)
+```
+
+For the purposes of this session, we will be using data from Bushong & Jaeger (2019), an experiment on speech perception. In this experiment, participants hear sentences like "I noticed a [?]ent in the fender...", where the [?] is a sound manipulated to range from sounding more like /t/, more like /d/, or somewhere in the middle by changing the value of an acoustic variable called **VOT**. We also manipulate a later word in the sentence to bias more towards a /d/ interpretation (i.e. "fender" should make you more likely to think the earlier word was "dent"), or a /t/ interpretation (e.g., "campgrounds"). Finally, we also manipulate how far away this biasing context word appears ("short" = 3 syllables after the target word, "long" = 6-9 syllables after). After listening to the sentence, the participant indicates whether they thought the word was "dent" or "tent" (key dependent variable). We also collect their reaction time on this response.
+
+This figure gives a conceptual overview of the manipulated variables:
+
+![](design_fig.png) 
+
+I've shared the dataset with you as a .RDS file, a special format for storing R data frames. We can load the dataset by using the `readRDS()` function:
+
+```{r, cache = TRUE}
+d <- readRDS("data_preprocessed.RDS")
+```
+
+### Inspecting Data
+
+The functions `View()` and `head()` will be your best friends for taking a look to see what is in your data frame. `head()`, for example, shows the first 6 rows of your data frame:
+
+```{r, cache = TRUE}
+head(d)
+```
+
+To view an individual column, we can subset our data using the `$` operator. For example, to see the first 6 values of the `RT` column, I would use the command:
+
+```{r, cache = TRUE}
+head(d$RT)
+```
+
+Here are a few other functions I commonly use to inspect data:
+
+* `names()` will return the names of all columns in your data frame
+* `class()` (using a specific column as an input) will tell you what data type a specific column in your data frame is. 
+* `summary()` will give some basic descriptive statistics of your columns
+* `unique()` will return all unique values of a variable when you give a single data frame column as input
+
+Here's how the output of each of those looks:
+
+```{r, cache = TRUE}
+names(d) # get column names
+class(d$RT) # what data type is RT?
+summary(d)
+unique(d$VOT) # how many levels of the VOT variable are there?
+```
+
+### Data Visualization using `ggplot2`
+
+`tidyverse` contains the library `ggplot2` which uses the "grammar of graphics" framework for data visualization. This works essentially as a layering system: we start with a base layer of a `ggplot()` call, which creates the basic template (at minimum, the data and variables that will be on our x- and y-axes) from which we will work. The first argument of `ggplot()` will be our data frame `d`; then, we need to give a second argument called `aes()` ("aesthetics") specifying our x and y axes. Let's say that what we eventually want to do is create a plot showing the proportion of /t/ responses (y axis) by VOT (x axis) and context word (we'll get to that later). This is how we would create our base layer:
+
+```{r, cache = TRUE}
+ggplot(d, aes(x = VOT, y = respond_t))
+```
+
+Now what we want to do is add `geom` objects to our plot, creating our actual visualization. For this example, let's use `geom_point()`, which will create a point at each VOT value. 
+
+Our data is in its raw form, meaning that our `respond_t` variable is a bunch of 0's and 1's. We want to transform that into a proportion by taking the mean of the column; the `ggplot2` function `stat_summary()` allows us to do just that! We need to give `stat_summary()` a couple different arguments:
+
+* `fun`: the function we want to apply (in this case, `mean()`)
+* `geom`: the geom we want (in this case, "point")
+
+Let's add it to our base layer:
+
+```{r, cache = TRUE}
+ggplot(d, aes(x = VOT, y = respond_t)) +
+  stat_summary(fun = mean, geom = "point")
+```
+
+To make this visualization better, we may want to add error bars to our points! Turns out there are two built-in geoms for just this purpose: `geom_pointrange()` and `geom_errorbar`. Since we are already using points, let's use `geom_pointrange()`. To use it in conjunction with `stat_summary()`, we will need to use a function that computes *both* the mean and a measure of uncertainty. I like the function `mean_cl_boot()`: this computes the mean and 95% confidence intervals using a bootstrap method. Here's how we would add that to our plot:
+
+```{r, cache = TRUE}
+ggplot(d, aes(x = VOT, y = respond_t)) +
+  stat_summary(fun.data = mean_cl_boot, geom = "pointrange") # notice here I have to use the argument fun.data instead of fun
+```
+
+Let's return to our original visualization goal: to plot /t/ responses by both VOT and context word. One good way to do that would be to plot points in different colors that correspond to the different context word conditions. The way that we can do this is to specify an additional `aes()` argument in our original `ggplot()` call: `color`:
+
+```{r, cache = TRUE}
+ggplot(d, aes(x = VOT, y = respond_t, color = context)) +
+  stat_summary(fun.data = mean_cl_boot, geom = "pointrange") # notice here I have to use the argument fun.data instead of fun
+```
+
+### Making Your Plots Prettier
+
+The basic plotting defaults are a tad bit ugly. Here are a few issues right off the bat:
+
+* The axes are labeled with our variable names, which might not be very understandable for our eventual reader
+* The default colors are ugly (my own personal opinion lol) 
+* The axis text is a bit small and difficult to read
+* The default background of gray with white gridlines can make some plots difficult to read
+
+Fortunately, there is a massive selection of functions we can add to our plot to correct these issues!
+
+#### Geom Colors
+
+There is a family of functions all starting with `scale_color` that allow us to change the color of our points. Here are a few that I like:
+
+* `scale_color_manual()` allows you to manually enter which colors you would like your points (or other geoms) to be. You can specify with RGB values, hex code names, or the built-in names of R colors. A comprehensive list of R color names can be found here: http://www.stat.columbia.edu/~tzheng/files/Rcolor.pdf 
+* `scale_color_brewer()` uses the R Color Brewer system. You have three color scheme options: sequential (gives a gradient from light-dark for one color), qualitative (gives easily distinguishable colors), and diverging (gradient from one color to its opposite). You can find a list of all the palettes here: https://r-graph-gallery.com/38-rcolorbrewers-palettes.html. This is a great option, especially the qualitative color palettes, because they are designed to be color-blind friendly!
+
+Here's an example of our plot with the color brewer palette Dark 2:
+
+```{r, cache = TRUE}
+ggplot(d, aes(x = VOT, y = respond_t, color = context)) +
+  stat_summary(fun.data = mean_cl_boot, geom = "pointrange") +
+  scale_color_brewer(type = "qual", palette = "Dark2")
+```
+
+#### Axis & Legend Labeling
+
+The functions `xlab()` and `ylab()` allow us to input our own text labels for our axes, like so:
+
+```{r, cache = TRUE}
+ggplot(d, aes(x = VOT, y = respond_t, color = context)) +
+  stat_summary(fun.data = mean_cl_boot, geom = "pointrange") +
+  scale_color_brewer(type = "qual", palette = "Dark2") +
+  xlab("VOT (ms)") +
+  ylab("Proportion /t/ responses")
+```
+
+In the same function I used to create my point colors, I can also use the `name` and `labels` arguments to change the name of the legend and the labels, respectively:
+
+```{r, cache = TRUE}
+ggplot(d, aes(x = VOT, y = respond_t, color = context)) +
+  stat_summary(fun.data = mean_cl_boot, geom = "pointrange") +
+  scale_color_brewer(type = "qual", palette = "Dark2", name = "Context bias", labels = c("dent-biasing", "tent-biasing")) +
+  xlab("VOT (ms)") +
+  ylab("Proportion /t/ responses")
+```
+
+### Plot Customization with `theme()`
+
+Literally everything you can imagine about your plots are customizable, and much of this is done with the `theme()` function you can add to your `ggplot()`. There are some built-in themes; my favorites are `theme_classic()` and `theme_bw()`, which in my opinion are much more readable than the default gray-background plot. Here's an example of `theme_bw()`:
+
+```{r, cache = TRUE}
+ggplot(d, aes(x = VOT, y = respond_t, color = context)) +
+  stat_summary(fun.data = mean_cl_boot, geom = "pointrange") +
+  scale_color_brewer(type = "qual", palette = "Dark2", name = "Context bias", labels = c("dent-biasing", "tent-biasing")) +
+  xlab("VOT (ms)") +
+  ylab("Proportion /t/ responses") +
+  theme_bw()
+```
+But the most customizable option is to add your own theme elements. There are approximately 80 million theme objects, which you can view by running the help function on theme (`?theme`). I find this walkthrough to be quite helpful: https://henrywang.nl/ggplot2-theme-elements-demonstration/. 
+
+Here's how theme objects work on a basic level. Each theme object has its own associated element type -- for example, anything that deals with text will be specified by an `element_text()` function call which takes arguments like `size`, `color`, etc. Here are all element types:
+
+* `element_text`: text elements (axis labels, axis values, legend titles, etc.) 
+* `element_rect`: box elements (like the border of the plot, etc.). Takes arguments like `fill`, `color` (outline)
+* `element_line`: linear elements (like gridlines in the plot). Takes arguments like `color`, `size` (thickness of line)
+* `element_blank`: this will remove an element. E.g. if you don't want an axis label and you want that space to be taken away completely, you can assign the axis label element to `element_blank()`.
+
+Here are a few theme objects I find myself frequently editing:
+
+* `axis.text`, `axis.title`, `legend.text`, `legend.title`: Text associated with the axes and legend (value labels and title, respectively). You can make these more specific by adding which axis you would like to change (e.g., `axis.text.x`)
+* `panel.background` and `plot.background`: Outline & fill of the plot. `plot.background` deals with the entirety of the plot, while `panel.background` is just the area within the axes of your plot.
+* `panel.grid`: Great for changing how obvious or subtle your grid lines are. You can make them lighter to make them more unobtrusive (I like the color "grey95", it's practically white but still somewhat visible)
+
+```{r, cache = TRUE}
+ggplot(d, aes(x = VOT, y = respond_t, color = context)) +
+  stat_summary(fun.data = mean_cl_boot, geom = "pointrange") +
+  scale_color_brewer(type = "qual", palette = "Dark2", name = "Context bias", labels = c("dent-biasing", "tent-biasing")) +
+  xlab("VOT (ms)") +
+  ylab("Proportion /t/ responses") +
+  theme(axis.text = element_text(size = 18),
+        axis.title = element_text(size = 18),
+        legend.text = element_text(size = 18),
+        legend.title = element_text(size = 18),
+        panel.grid = element_line(color = "grey95"),
+        panel.background = element_rect(color = "black", fill = "NA")) # fill = "NA" creates a transparent background, very good for putting on slides with non-white background color!) 
+```
+
+## Your Turn!
+
+### Problem 1: Facets
+
+Let's imagine that I want to see the VOT & context effect broken up by an additional manipulation in the experiment: `distance`. In this experiment, I manipulated how far away the biasing context word occurred ("short" distance = 3 syllables later, "long" distance = 6-9 syllables later). We can show this additional variable by using facets.
+
+Try to replicate this plot:
+
+```{r, echo = FALSE, cache = TRUE, message = FALSE}
+ggplot(d, aes(x = VOT, y = respond_t, color = context)) +
+  stat_summary(fun.data = mean_cl_boot, geom = "pointrange") +
+  scale_color_brewer(type = "qual", palette = "Dark2", name = "Context bias", labels = c("dent-biasing", "tent-biasing")) +
+  xlab("VOT (ms)") +
+  ylab("Proportion /t/ responses") +
+  theme(axis.text = element_text(size = 18),
+        axis.title = element_text(size = 18),
+        legend.text = element_text(size = 18),
+        legend.title = element_text(size = 18),
+        panel.grid = element_line(color = "grey95"),
+        panel.background = element_rect(color = "black", fill = "NA"),
+        strip.background = element_rect(color = "black", fill = "white"),
+        strip.text = element_text(size = 18)) + # fill = "NA" creates a transparent background, very good for putting on slides with non-white background color!) 
+  facet_wrap(~ distance)
+```
+
+Here is the series of steps you'll need to take:
+
+1. Use our point plot above as a 'base'.
+2. Facet the plot by the `distance` variable *(hint: check out the `facet_wrap()` function)*
+3. Change the facet headers to have a white background and black border, and text size 18 to match our axes and legend *(hint: look at the `strip.background` and `strip.text` theme objects)*
+
+### Problem 2: Trial Effects
+
+Let's say that I want to see how the effect of context bias changes over the course of the experiment. Try to replicate this plot:
+
+```{r, echo = FALSE, cache = TRUE, message = FALSE}
+ggplot(d, aes(x = Trial, y = respond_t, color = context)) +
+  stat_summary(fun = mean, geom = "point") +
+  geom_smooth(method = "lm") +
+  scale_color_brewer(type = "qual", palette = "Dark2", name = "Context bias", labels = c("dent-biasing", "tent-biasing")) +
+  xlab("Trial") +
+  ylab("Proportion /t/ responses") +
+  theme_classic()
+```
+
+Here is the series of steps you'll need to take:
+
+1. Plot the mean of `respond_t` for each `Trial` using a point geom. 
+2. Show a **linear** fit line *(hint: check out the `geom_smooth()` function and its associated `method` options).*
+2. Change axis & legend labels.
+3. Use the built-in theme `theme_classic()`.
+
+### Problem 3: Histograms
+
+Try to replicate this plot:
+
+```{r, echo = FALSE, cache = TRUE, message = FALSE}
+d2 <- subset(d, RT < 10000)
+ggplot(d2, aes(x = RT)) +
+  geom_histogram(color = "black", fill = "grey83") +
+  theme(panel.grid = element_blank(),
+        panel.background = element_rect(fill = "white", color = "black"),
+        text = element_text(face = "bold"))
+```
+
+First, I'm going to remove some RT outliers. Run this line of code to do that, and use `d2` as your plotting data:
+
+```{r, cache = TRUE}
+d2 <- subset(d, RT < 10000) # removes all RTs above 10000 (10 seconds)
+```
+
+Here is the series of steps you'll need to take:
+
+1. Create a histogram of `RT`. *Hint: take a look at the ggplot cheat sheet or `geom_histogram()` help docs*
+2. Change the histogram bar colors to a lighter gray and make the outline of the bars black.
+2. Change the plot's background color to white, remove grid lines, and make a black panel outline. Also, change text to bold *(hint: check out the `face` argument to `element_text()`)*
+
+
+# Part 2: R Basics & Data Transformation
+
+## R Basics
+
+You can type expressions directly for into the console for evaluation like so:
+
+```{r, cache = TRUE}
+1 + 1
+```
+
+If you want to save a computation or value, you can *assign* it to a variable using the `<-` operator:
+
+```{r, cache = TRUE}
+x <- 1 + 1
+```
+
+To view the contents of a variable, simply type in its name:
+
+```{r, cache = TRUE}
+x
+```
+
+We frequently need to use logical operators to evaluate expressions. Here are the most common ones:
+
+```{r, cache = TRUE}
+1 == 1 # equal  to
+1 != 2 # not equal to
+1 == 1 & 1 == 2 # and
+1 == 1 | 1 == 2 # INCLUSIVE or
+xor(1 == 1, 1 != 2) # EXCLUSIVE or (checks if one and only one is true)
+```
+
+We can create vectors using `c()` (mnemonic: stands for concatenate). To index a particular value of a vector, we use square brackets [].
+
+```{r, cache = TRUE}
+myvec <- c(1, 2, 3, 4)
+myvec
+myvec[1]
+myvec[1:3]
+myvec[c(1, 3)] # return first and third element of vector 
+myvec[myvec == 1] # return all of the elements in the vector that have a value of "1" 
+```
+
+Here are some typical descriptive statistics functions:
+
+```{r, cache = TRUE}
+mean(myvec)
+sd(myvec)
+range(myvec)
+min(myvec)
+max(myvec)
+```
+
+Matrices are one step up in complexity from vectors in that we can have multiple rows/columns. We index in a similar way, though now we need to refer to both row (first index) and column (second index):
+
+```{r, cache = TRUE}
+mymat <- matrix(c(1:10, 21:30), ncol = 2)
+mymat
+mymat[3, 2]
+mymat[3, ] # leaving an index blank means "all", so this will return all columns of the second row
+mean(mymat[, 2]) # mean of the second column
+mymat[mymat[, 1] == 5, ] # all the rows which have a "5" in the first column
+```
+
+Matrices are not great for data analysis, however -- all of the columns must have the same data type, whereas it is ideal for us to be able to have a mix of types (character, number, etc.). This is where the `data.frame` object comes in. These objects are like matrices, but each column can have its own data type. We've already seen an example of data frames and basic data frame operations above with our data visualization! Now let's see more complex data transformation functions...
+
+## Basic Data Transformations
+
+### Grouping & Summarizing
+
+The `tidyverse` library contains many useful functions for *transforming* our data into more functional/usable formats. For example, let's say that I want to find the mean /t/-responses for each context condition in my experiment. I can do that by using the `filter()` or `subset()` functions (they're more or less interchangeable):
+
+```{r, cache = TRUE}
+t_context <- subset(d, context == "tent")
+mean_t_context <- mean(t_context$respond_t)
+d_context <- subset(d, context == "dent")
+mean_d_context <- mean(d_context$respond_t)
+```
+
+But this quickly becomes very inefficient! It's much more efficient to use `group_by()`, which will group my data frame by any variables I specify. I can then use `summarise()` to compute summary statistics for each level of grouped variable:
+
+```{r, cache = TRUE}
+means_by_context <- d %>% # %>% is known as the pipe operator, and passes the data frame as the first argument to the next row
+  group_by(context) %>%
+  summarise(mean_t = mean(respond_t))
+```
+
+
+### Mutating
+
+In base R, I can add a new column to my data frame my simply creating a new column using the `$` operator:
+
+```{r, cache = TRUE}
+d$RT_zscore <- scale(d$RT) # the scale() function z-scores values
+```
+
+The `tidyverse` function `mutate()` performs the same function:
+
+```{r, cache = TRUE}
+d <- d %>%
+  mutate(RT_zscore2 = scale(RT))
+```
+
+The `mutate()` function is more powerful, however, since you can pair it with `group_by()`. I don't have a great example for this particular dataset so this will be a bit contrived, but bear with me. Let's say that I want to use subjects' mean reaction times as an predictor of their categorization responses. I don't want to summarize my data because I want each individual response to be preserved, but I do want to calculate a summary value over a particular goruping variable. I can do this by using `group_by(subject)` then creating a new column for each subject's mean RT:
+
+```{r, cache = TRUE}
+d <- d %>%
+  group_by(subject) %>%
+  mutate(mean_rt = mean(RT))
+```
+
+Now I have a summary value but with the same size of dataset as before! 
+
+## Your Turn! 
+
+###  Problem 1: Outlier Removal
+
+Create a new data frame which removes all data points where the RT is more than 3 standard deviations above or below the mean.
+
+### Problem 2: Plotting Subject Means
+
+Create a new data frame where you compute mean /t/ responses grouped by subject, VOT, and context. Then, recreate our point plot from the beginning of the lab using subject means rather than raw respond_t as the y varaiable.
+
+# Part 3: Linear Regression
+
+Every statistical model in R works in a similar way. We specify a `formula` of the form:
+
+`outcome variable ~ predictor variables`
+
+and our dataset. Let's say, for example, that I simply want to do a t-test predicting RT from distance. We can do this using the `t.test()` function like so: 
+
+```{r, cache = TRUE}
+myttest <- t.test(RT ~ distance, d)
+myttest
+```
+
+When we get to anything more complex than a t-test, the model object output also becomes more complex. For the most part, we will want to use the `summary()` function on these model objects; this will provide us with the most relevant statistical information. Let's look at an example of an ANOVA using the `aov()` function:
+
+`## Basic Data Transformations
+
+```{r, cache = TRUE}
+myanova <- aov(RT ~ distance, d)
+summary(myanova)
+```
+
+Linear regression is just as simple to implement! I will give the same formula, but now I use the `lm()` function (standing for 'linear model'):
+
+```{r, cache = TRUE}
+mylinreg <- lm(RT ~ distance,  d)
+summary(mylinreg)
+```
+
+To add more predictors, I simply use the `+` and `*` operators. `+` adds another predictor as a main effect, and `*` adds a main effect and interaction. Here is a linear regression with distance and VOT as main effects with no interactions:
+
+```{r, cache = TRUE}
+maineffects <- lm(RT ~ VOT + distance,  d)
+summary(maineffects)
+```
+
+Here is the model with the interaction:
+
+```{r, cache = TRUE}
+interactionmodel <- lm(RT ~ VOT * distance,  d)
+summary(interactionmodel)
+```
+
+Let's talk about interpretation for a moment. Remember that we are fitting a model of the form:
+
+y = intercept + beta1 x VOT + beta2 x distance + beta3 x VOT x distance
+
+In the presence of an interaction, to interpret each of our coefficients, we need to set all the others to zero. So what does an intercept of 6305 mean? It means that the average reaction time when VOT = 0 & distance = 0 is 6305. In this particular instance, this is a hypothetical value because there are no examples of VOT = 0 in the experiment (the lowest VOT value is 10). And what exactly is distance = 0? Well, R assigns values to categorical variables using what is called "dummy coding" by default. For a categorical variable with 2 levels, the first value alphabeticall is assigned 0, and the second is assigned 1. So "distance = long" is "distance = 0". So, our intercept is the estimated reaction time for distance = long and VOT = 0. 
+
+The VOT main effect needs to be interpreted in a similar way: with a value of -2.4, this means that the estimated increase in RT for each 1-unit increase of VOT is -2.4, *specifically in the distance = long condition.* Similarly, the distance main effect of -222.3 is the estimated effect at VOT = 0. 
+
+The interaction  coefficient is now a description of how each main effect changes with a unit increase in the other. That is to say, the interaction of .5 means that the effect of VOT is .5 *higher* in the distance = short condition than the distance = long condition. I.e., the estimate of the VOT effect is -2.4 in the long distance condition, and -1.9 in the short distance condition. Alternatively, we can frame it in terms of the distance effect: the distance effect is -222.3 at VOT = 0, and increases by .5 for every unit increase in VOT. So, for example, the estimated distance effect at VOT = 10 would be -222.3 + (.5 x 10) = -217.3, and so on.
+
+Notice how different this interpretation is from an ANOVA! Next week, we will see how we can re-code variables in order to give them an ANOVA-like interpretation.
+
+## Your Turn!
+
+Fit a linear regression predicting RT from distance and context, including the interaction.
+
+* How would you interpret each coefficient? 
+
+* What is the predicted value for the distance = short and context = dent condition? 
+
+* What is the predicted value for the distance = long and context = tent condition?
+
+# Part 3B: Variable Coding For Linear Regression
+
+In general, there are two ways you can change the coding of your categorical variables in R:
+
+* Manually create a new numeric variable with the desired coding scheme 
+
+* Use one of R's built-in factor coding functions. Your variable will retain its names for ease of use, but will be treated like a number when inputted into a model. 
+
+First, we want to make sure that all of our categorical variables are factors in R (they might be strings). We can do this using the `class()` function:
+
+```{r, cache = TRUE}
+class(d$context)
+class(d$distance)
+```
+Great! They're both factors. If they weren't, we could convert them to factors by using the function `as.factor()` like so: 
+
+```{r, cache = TRUE}
+d$context <- as.factor(d$context)
+```
+
+We can check the current coding scheme of our variable by using the function `contrasts()`:
+
+```{r, cache = TRUE}
+contrasts(d$context)
+```
+
+R dummy-codes by default, with the reference level being the first alphabetical level. 
+
+Now let's change our coding scheme to sum-coding with values of -0.5 and 0.5. First let's do this manually. The best way to do this is by creating a new column and using a conditional statement to assign new values. An easy way to do this is the `ifelse()` function. This will check whether the condition you give it (as the first argument) is true, and returns a specified value (second argument) if it is, and otherwise returns the third argument. Here's how I can create a new column with sum-coding of my context factor:
+
+```{r, cache = TRUE}
+d$context.sum <- ifelse(d$context == "dent", -0.5, 0.5)
+```
+
+Now I have a new column with my desired coding scheme, and I can use this as input to my model. I just have to remember which number I assigned to which condition!
+
+The alternative is to use R's built-in coding scheme functions. Dummy coding is controlled by `contr.treatment()` and sum coding by `contr.sum()`. We will want to tell this function how many levels we have (here, 2), and then assign the output to the `contrasts` attribute of our factor. Here's how this works:
+
+```{r, cache = TRUE}
+contrasts(d$context) <- contr.sum(2)
+contrasts(d$context)
+```
+
+Now if we check contrasts again, we'll see they are sum-coded. Unfortunately, the default is values of -1 and 1, which is not always desirable for interpreting coefficients. This is why  I generally prefer creating my own new numeric variables! 
+
+## Your Turn!
+
+Create a new variable with sum coding for the "distance" factor (like with context, make the values -0.5 and 0.5). Create a new variable that is a centering of the VOT variable (i.e., subtracting the mean). Then, fit a linear regression predicting RT from distance and context, including the interaction.
+
+* How would you interpret each coefficient? 
+
+* What is the predicted value for the distance = short and context = dent condition? 
+
+* What is the predicted value for the distance = long and context = tent condition?
